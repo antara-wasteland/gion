@@ -89,7 +89,16 @@ settled as part of the hook spec rather than discovered during implementation.
 
 ## 4. How is an archived workspace represented in `gion.yaml`?
 
-Blocks D3.
+Blocks D3. **Narrowed** — kra's implementation answers the semantic half (see
+[references/kra.md](../references/kra.md)): archived worktrees are detached and
+metadata is the restore authority, not preserved in place. And gion's manifest
+repo entries already carry the fields kra's `repos_restore` uses.
+
+So the remaining question is narrower than it was: should archived be a third
+state in `planner`'s diff — materialized, archived, absent — or something
+outside the manifest entirely? A third state keeps one source of truth and
+avoids kra's directory move (gion already separates desired state from layout),
+but it touches the core diff model that everything else relies on.
 
 gion's diff is two-state: in the manifest and on disk (converged), in one but not
 the other (add/remove). An archived workspace is neither, and if it is simply
@@ -97,9 +106,10 @@ left in the manifest with its directory gone, `apply` will recreate it — while
 removing it from the manifest makes `apply` delete the worktrees archiving was
 supposed to preserve.
 
-So archive needs a manifest-level state before it needs a command. Sub-questions:
-should archived worktrees remain attached, be detached while preserving branches,
-or be reduced to metadata? Should the choice depend on policy or workspace age?
+So archive needs a manifest-level state before it needs a command. The
+attached-versus-detached sub-question is effectively settled by kra's precedent
+(detach, restore from metadata); what remains open is whether the choice should
+ever depend on policy or workspace age, or whether one behavior is enough.
 
 Note that `resume` already exists as a `mode` value in
 `docs/spec/core/METADATA.md` without a lifecycle behind it — worth deciding
@@ -121,14 +131,23 @@ primary consumer.
 
 ## 6. Scope of the first JSON output
 
-Blocks M6. Emitting JSON for every command at once is a large surface to commit
-to and to keep stable. A smaller first step — `plan` and a future `status`, the
-two an agent most needs to read — establishes the schema conventions with less
-commitment.
+Blocks M6. **Mostly answered** — the schema question should not be reopened.
+kra already ships `--format json` with an `ok`/`action`/`result`/`error`
+envelope, a `failures[]` array of `code`/`message`, and exit codes `0`/`2`/`3`
+(success / usage / runtime). Same author, same workstation. gion should mirror
+that rather than invent a second convention for an agent to learn.
 
-Related and cheaper: an exit code taxonomy is independent of JSON and could land
-first. Both `cmd/gion/main.go` and `cmd/giongo/main.go` currently `os.Exit(1)`
-on every error path, so any distinct codes are additive.
+What is still open is scope and spelling:
+
+- Which commands first? `plan` and a future `status` are what an agent most
+  needs to read; committing every command at once is a large stable surface.
+- `--format json` (kra's spelling) or `--json`? Matching kra is the obvious
+  default.
+- Does `giongo` participate, or is `--print` sufficient for the picker?
+
+Exit codes are independent and cheaper, and could land first — both
+`cmd/gion/main.go` and `cmd/giongo/main.go` currently `os.Exit(1)` on every
+error path, so adopting `0`/`2`/`3` is purely additive.
 
 ## 7. Should the shared bare store be gion's own?
 
@@ -151,11 +170,17 @@ It must not create extra Git worktrees — Git's unit is the repository.
 
 ## 9. Terminal runtime: adapter, or out of scope entirely?
 
-[references/herdr.md](../references/herdr.md) argues for a generic
+[references/herdr.md](../references/herdr.md) argued for a generic
 `WorkspaceRuntime` interface rather than a hardcoded multiplexer integration.
-The prior question for gion is whether terminal runtime belongs in gion *at all*,
-given that `gion shell init` already solves navigation without owning any
-session state.
+That argument has been overtaken: kra already has such an interface
+(`cmuxOpenClient`, with a concrete `cmuxctl.Client` behind a factory), so a
+Herdr backend there is an implementation against an existing seam rather than an
+architectural change.
+
+The prior question for gion is unchanged and more pointed for it: does terminal
+runtime belong in gion *at all*, given that `gion shell init` already solves
+navigation without owning any session state — and given that the sibling tool
+which does own a runtime already has the adapter?
 
 Leaving it out keeps gion smaller and keeps the substrate's ownership boundary
 clean. Taking it on means persisting a runtime workspace ID in metadata and

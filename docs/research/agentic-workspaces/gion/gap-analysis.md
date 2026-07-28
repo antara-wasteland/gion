@@ -99,6 +99,14 @@ creates is a checked-out worktree and nothing more — the user still has to ent
 it and run project setup by hand, which is precisely the operational gap that
 motivated the whole survey.
 
+Worth keeping in proportion: **kra does not have hooks either**. Neither
+`ws create` nor `ws add-repo` runs user-defined commands, and its
+`ws open --command` sends a startup command to the terminal rather than running
+a tracked lifecycle step (see [references/kra.md](../references/kra.md)). This
+is a category-wide gap, not gion falling behind a sibling — which makes it a
+capability worth building well and upstreaming rather than a deficit to catch up
+on.
+
 **Shape of the fix.** The declarative model gives this a natural home that
 imperative tools do not have: bootstrap state belongs in the reconciliation
 loop, not beside it. A workspace whose blocking hooks have not succeeded is
@@ -273,6 +281,19 @@ So `--json` is a second renderer over types that exist, are pure, are already
 versioned for reuse across two binaries, and carry no formatting concerns —
 not new data plumbing. Exit codes are independent of it and cheaper still.
 
+**And the design work is already done, by the same author.** kra supports
+`--format json` across its core commands with an `ok` / `action` / `result` /
+`error` envelope and a `failures[]` array carrying `code` and `message`, plus a
+three-valued exit taxonomy: `0` success, `2` usage error, `3` business or
+runtime failure. Its specs describe this as a deliberate effort to align JSON
+contracts for automation.
+
+That reframes M6 from a design problem to an adoption one. gion should not
+invent a schema; it should mirror kra's, so that an agent driving both tools
+sees one convention. It also removes the main argument for deferring: the
+envelope, the error-code discipline and the exit codes have already been
+specified and shipped somewhere the maintainer controls.
+
 ---
 
 ## Strongly desired
@@ -298,8 +319,30 @@ Note the interaction with the declarative model: an archived workspace is
 neither present-and-desired nor absent-and-undesired, so it does not fit the
 current two-state diff. Archive needs a manifest representation before it needs
 a command, or `apply` will simply reconcile archived workspaces out of existence.
-This is the requirement whose design is most entangled with gion's core model,
-and it should not be treated as an easy additive feature.
+This remains the requirement whose design is most entangled with gion's core
+model.
+
+**kra has a worked answer, and gion is closer to it than expected.** kra's
+`ws close` refreshes a `repos_restore` record from live state, removes the
+worktrees, deletes the local branches from the bare pool, and moves the
+workspace to a sibling `archive/` directory; `ws reopen` rebuilds the worktrees
+from that record. So archived worktrees are **detached, with metadata as the
+restore authority** — the "reduced to lighter metadata" option, not
+"remain attached."
+
+`repos_restore` stores `repo_uid`, `repo_key`, `remote_url`, `alias`, `branch`
+and `base_ref`. gion's `gion.yaml` repo entries already store `alias`,
+`repo_key`, `branch` and `base_ref` — **gion's manifest is already a
+`repos_restore` record.** It has everything needed to reconstruct a workspace;
+what it lacks is a state meaning "keep this record, do not materialize
+worktrees."
+
+That makes the likely shape a workspace-level status in `gion.yaml` that
+`planner` treats as a third desired state — materialized, archived, absent —
+rather than a new storage location or a parallel metadata file. gion would not
+need kra's directory move, because gion already separates desired state from
+filesystem layout. Still a real change to the diff model, and still the item to
+design most carefully, but no longer an open-ended question.
 
 ### D4 · Trash-before-delete ❌
 

@@ -32,6 +32,12 @@
 - Design notes and backlogs live under `docs/plans/`.
 - Main IaC backlog: `docs/plans/2026-01-21-iac-backlog.md`
 
+## Research
+- Exploratory research lives under `docs/research/` (`status: research` frontmatter). It is **not** spec and **not** committed roadmap; `docs/spec/` remains the source of truth for behavior.
+- `docs/research/agentic-workspaces/`: gion's role as a task-workspace substrate for parallel coding agents.
+  - `gion/gap-analysis.md` scores gion against the requirements and is the useful entry point.
+  - Split by ownership: `substrate/` is tool-neutral and portable to other repos, `gion/` is specific to this repo and must cite gion code or specs, `references/` covers tools we do not own. Keep new pages in the right bucket.
+
 ## Non-negotiables (safety)
 - Do NOT run destructive commands (e.g., `rm -rf`, `sudo`, `chmod -R`, `dd`, disk operations).
 - Do NOT modify files outside the repository root.

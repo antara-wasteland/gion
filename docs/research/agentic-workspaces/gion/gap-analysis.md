@@ -10,11 +10,37 @@ Every requirement from
 [substrate/03-requirements.md](../substrate/03-requirements.md) scored against
 the gion codebase, with the evidence that produced each score.
 
-Assessed against `18e1fd2` (2026-07). Scores are claims about code that exists
-today, not about intent. Where a requirement is met by a different mechanism than
-the substrate notes imagined, that is recorded as met, with the mechanism named.
+Assessed against `18e1fd2` (2026-07), which is also `tasuku43/gion` `main` at the
+time of writing — so these findings describe upstream, not fork-local drift, and
+the work items below are upstreamable rather than fork-only.
+
+Scores are claims about code that exists today, not about intent. Where a
+requirement is met by a different mechanism than the substrate notes imagined,
+that is recorded as met, with the mechanism named.
 
 **Legend** — ✅ met · 🟡 partial · ❌ missing
+
+## Architectural context
+
+gion is a **functional core with an imperative shell**, and the core lives in a
+separate zero-dependency module, `github.com/tasuku43/gion-core`: `planner`
+(inventory diff), `applyplan` (destructive detection, execution ordering),
+`workspacerisk` (repo state classification and aggregation), `gcplan`,
+`importplan`, `manifestlsplan`, plus git parsing and path normalization
+helpers. This repository runs git, touches the filesystem, prompts, and renders.
+
+This shapes almost every finding below, so it is stated once here:
+
+- **The plan is already a structured value in a reusable library.** `--json`
+  (M6) is a marshaling layer over `planner.WorkspaceChange` and friends, not new
+  data plumbing.
+- **The risk taxonomy is a pure state machine, not CLI code.** M3's states come
+  from `workspacerisk.ClassifyRepoStatus` and `AggregateForState`.
+- **There is a natural seam for new capabilities** — decide in the core, execute
+  in the shell — which is the shape hooks want (M1).
+- **Generic primitives have a route upstream.** `gion-core` is described as the
+  shared library for `gion` *and* `gionx`; upstream already factors reusable
+  logic out of the CLI. See [positioning](positioning.md#the-functional-core).
 
 ## Summary
 
@@ -81,6 +107,20 @@ failed bootstrap becomes a re-runnable state rather than a wedged directory.
 That is a genuinely better answer than the one the substrate notes sketched, and
 it is available only because gion is declarative.
 
+The core/shell split says where the pieces go, and the split is clean:
+
+- **`gion-core`** decides *whether* a hook needs to run — a bootstrap-state
+  input to `planner.Diff`, so "bootstrap not run" becomes a `RepoChange` kind
+  like any other, and a pure `applyplan` rule for ordering hooks against
+  worktree attachment. All of this is testable without executing anything.
+- **`gion`** executes the hook, streams its output, enforces the trust
+  prompt, and persists the resulting state.
+
+Notably this keeps `plan` read-only for free: deciding that bootstrap is
+outstanding is a pure function of recorded state, so `plan` never has to run a
+hook to report that one is pending. It also puts the reusable half in the
+library that already serves two binaries, which is the upstreamable shape.
+
 Design questions that need resolving first are in
 [adoption-questions.md](adoption-questions.md).
 
@@ -121,11 +161,20 @@ closer than the ❌ items.
 **Required:** distinguish clean/integrated, dirty, unpushed, diverged, unknown,
 stale, archived; destructive operations fail safely by default.
 
-**Found:** `docs/spec/commands/plan.md` — removal plans print a per-repo risk
-summary covering `dirty`, `unpushed`, `diverged`, `unknown`, plus ahead/behind
-sync state, changed-file counts and the modified/untracked/conflicted file list.
-`docs/spec/commands/manifest/gc.md` excludes any workspace containing a repo in
-dirty, unpushed, diverged or unknown state.
+**Found:** the taxonomy is a pure state machine in the core, not ad-hoc CLI
+formatting. `workspacerisk.ClassifyRepoStatus` maps a repo's status to
+`Clean`/`Dirty`/`Unpushed`/`Diverged`/`Unknown` with explicit precedence —
+error, dirty, and detached/missing-HEAD/no-upstream all resolve before
+ahead/behind is consulted, and ahead+behind is `Diverged` rather than
+`Unpushed`. `AggregateForState` then rolls repo states up to a workspace risk
+with the conservative ordering dirty > unknown > diverged > unpushed > clean, so
+one bad repo governs the whole workspace.
+
+On top of that, `docs/spec/commands/plan.md` — removal plans print a per-repo
+risk summary plus ahead/behind sync state, changed-file counts and the
+modified/untracked/conflicted file list. `docs/spec/commands/manifest/gc.md`
+excludes any workspace containing a repo in dirty, unpushed, diverged or unknown
+state.
 
 Safety defaults are strong and specified, not incidental:
 
@@ -138,11 +187,16 @@ Safety defaults are strong and specified, not incidental:
 - if the process cwd is inside a workspace being removed, gion shifts cwd to
   `<root>` first and emits a shell action to move the parent shell
 
-**Assessment.** This exceeds what the substrate asked for. The interrupted-removal
-state file in particular answers a failure mode the requirements list did not
-anticipate — a removal killed halfway leaves a recorded, inspectable state
-instead of a half-deleted workspace. Only `stale` and `archived` are unrepresented,
-and both are consequences of D3 rather than cleanup defects.
+**Assessment.** This exceeds what the substrate asked for, and it is the
+requirement gion implements most rigorously. The classification being pure and
+centrally defined means every consumer — `plan`, `gc`, `manifest ls` — agrees on
+what "unpushed" means, which is exactly the property a safety taxonomy needs and
+the one most easily lost to per-command reimplementation.
+
+The interrupted-removal state file answers a failure mode the requirements list
+did not anticipate: a removal killed halfway leaves a recorded, inspectable state
+instead of a half-deleted workspace. Only `stale` and `archived` are
+unrepresented, and both are consequences of D3 rather than cleanup defects.
 
 ### M4 · Monorepo and polyrepo ✅
 
@@ -207,10 +261,17 @@ gion is otherwise strongest. gion is heavily invested in a rich sectioned TUI
 the substrate is being built to serve. An agent that wants to know what `apply`
 would do has to scrape `Plan` section text.
 
-The plan/apply model makes this unusually tractable: a plan is already a
-structured value (`internal/app/manifestplan/types.go`) rendered to text at the
-edge, so `--json` is a second renderer over an existing type rather than new
-data plumbing. Exit codes are independent and cheaper still.
+It is also the cheapest gap to close, which makes the current state more
+frustrating rather than less. The data an agent wants already exists as plain
+structured values in a zero-dependency library: `planner.WorkspaceChange` and
+`RepoChange` with typed `Kind` enums, `applyplan.Execution` with the five
+ordered execution buckets, `workspacerisk.RepoState` and `WorkspaceRisk`.
+`internal/app/manifestplan/types.go` is a thin local alias over
+`coreplanner`. Text rendering already happens at the edge, in `internal/cli`.
+
+So `--json` is a second renderer over types that exist, are pure, are already
+versioned for reuse across two binaries, and carry no formatting concerns —
+not new data plumbing. Exit codes are independent of it and cheaper still.
 
 ---
 
@@ -319,6 +380,13 @@ effort-to-value ratio: the polyrepo case is the one gion is uniquely good at
 modelling and currently slowest at executing, and `gc` provides a working
 template to copy.
 
+The core/shell split helps here too. `applyplan.BuildExecution` already
+partitions changes into five ordered buckets (removals, update-removals,
+renames, adds, update-adds); ordering *between* buckets is a correctness
+constraint, but repo operations *within* a bucket are independent. Parallelism
+is therefore a shell-side change with the safety argument already encoded in the
+core — no reasoning about ordering has to be redone to make it safe.
+
 ---
 
 ## Out of scope — correctly absent ✅
@@ -355,6 +423,32 @@ That is a favorable shape for adoption. Both gaps are additive — neither
 requires reopening the core model, and both are the kind of generically useful
 primitive worth building properly rather than working around. Archive (D3) is
 the exception and should be designed against the manifest model deliberately.
+
+## Fork or upstream?
+
+The substrate's [fork strategy](../substrate/03-requirements.md) says to fork
+only when the architectural *unit* differs, and to prefer upstreamable
+primitives otherwise. On this evidence, nothing here justifies a fork.
+
+gion already is task-first, already composes polyrepo workspaces, already stays
+out of policy, and — via `gion-core` — already factors reusable logic into a
+dependency-free library serving more than one binary. The gaps are missing
+capabilities within an architecture that agrees with the substrate, not
+disagreements about what a workspace is.
+
+Every top work item also happens to be generically useful rather than
+workstation-specific: lifecycle hooks, JSON output, exit codes and parallel
+apply are things any gion user wants, and each splits cleanly into a pure
+`gion-core` half and a `gion` execution half. That is the profile the substrate
+describes as upstreamable, and the fork's `main` is currently identical to
+upstream's, so there is no divergence to reconcile first.
+
+The honest counter-argument is velocity: upstreaming is slower than shipping
+locally, and the hook design (question 1 in
+[adoption-questions.md](adoption-questions.md)) touches the manifest schema,
+which is the kind of decision an upstream maintainer will rightly want to own.
+Prototyping on the fork to answer the open design questions is reasonable;
+keeping the result there permanently is not, on this evidence.
 
 Suggested order, by blocker status and effort-to-value:
 

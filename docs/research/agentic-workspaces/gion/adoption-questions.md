@@ -35,6 +35,29 @@ determine bootstrap state without running anything, since `plan` is contractuall
 read-only (`AGENTS.md`). That implies persisted per-repo bootstrap state, most
 naturally alongside the existing operation state under `<root>/.gion/state/`.
 
+## 1b. What goes in `gion-core`, and does it land upstream?
+
+gion's logic is split between `github.com/tasuku43/gion-core` (pure decisions,
+zero dependencies, shared with `gionx`) and this repository (git, filesystem,
+prompts, rendering). Every work item in the gap analysis crosses that line, so
+each needs the split decided before implementation:
+
+| Item | Core half | Shell half |
+|---|---|---|
+| Hooks | is a hook outstanding; ordering vs. worktree attachment | execute, stream output, trust prompt, persist state |
+| JSON | already there — the plan types | marshal and emit |
+| Exit codes | error taxonomy | map to codes at `main` |
+| Parallel apply | already there — bucket ordering in `applyplan` | bounded worker pool |
+
+The follow-on question is release mechanics rather than design: a change that
+needs both halves needs a `gion-core` release before this repository can consume
+it, so the two-repo round trip should be planned for rather than discovered.
+
+And the strategic one: since these are generic capabilities in a library
+explicitly built for reuse, the default should be upstreaming rather than
+carrying them on a fork. Worth deciding deliberately — including how much
+prototyping happens here first — rather than by accident.
+
 ## 2. Hook semantics
 
 Still unresolved from [06-lifecycle-design.md](../substrate/06-lifecycle-design.md),

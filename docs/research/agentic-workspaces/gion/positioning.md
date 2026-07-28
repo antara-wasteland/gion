@@ -74,6 +74,45 @@ The cost is that gion's verbs are reconciliation-shaped (`manifest add`, `plan`,
 model, not a model mismatch — see the
 [gap analysis](gap-analysis.md) for how much of it is real.
 
+## The functional core
+
+The single most consequential implementation fact about gion is not in this
+repository. `go.mod` depends on `github.com/tasuku43/gion-core`, a separate
+versioned module with **zero dependencies of its own** — its `go.mod` declares
+nothing but `go 1.24.0`.
+
+It holds the pure decision logic:
+
+| Package | Responsibility |
+|---|---|
+| `planner` | desired-vs-actual inventory diff (`Diff`, `WorkspaceChange`, `RepoChange`) |
+| `applyplan` | apply-time semantics: destructive detection, safe rename checks, execution ordering |
+| `workspacerisk` | classify repo status into clean/dirty/unpushed/diverged/unknown, aggregate to workspace level |
+| `gcplan` | GC fetch planning and merge checks |
+| `importplan`, `manifestlsplan` | inventory reconstruction, drift categories |
+| `gitparse`, `gitref`, `repostore`, `repospec` | git output parsing, ref and store path normalization |
+
+This repository is the imperative shell: it runs `git`, touches the filesystem,
+prompts, and renders. `internal/app/apply/apply.go` consumes
+`coreapplyplan.BuildExecution` and executes the result; it does not decide what
+the result should be.
+
+Two things follow, and they matter more than any individual feature gap.
+
+**There is already an extension seam.** The architecture is a functional core
+with an imperative shell — decisions are pure and testable, effects are isolated.
+A new capability does not have to be bolted onto the CLI; it can be expressed as
+a decision in the core and an effect in the shell. This is exactly the shape a
+hook system wants (see [gap analysis M1](gap-analysis.md#m1--post-create-bootstrap-)).
+
+**The core was extracted for reuse, and is already reused.** `gion-core`'s README
+describes it as the *"shared core library for `gion` and `gionx`"* — there is a
+second consumer. Upstream has demonstrated, in code, that it will factor generic
+primitives out into a dependency-free library rather than keeping them
+CLI-specific. For the fork-versus-upstream question this is the strongest signal
+available: capabilities implemented generically have a natural home upstream, and
+a precedent for getting there.
+
 ## Root model
 
 A single global root (`--root` > `GION_ROOT` > `~/gion`) is a default, not a

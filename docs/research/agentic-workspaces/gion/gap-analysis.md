@@ -42,6 +42,32 @@ This shapes almost every finding below, so it is stated once here:
   shared library for `gion` *and* `gionx`; upstream already factors reusable
   logic out of the CLI. See [positioning](positioning.md#the-functional-core).
 
+## Upstream's own known gaps
+
+`docs/guides/USECASES.md` rates gion's UX per use case and ends with a
+"Known Gaps / Improvement Ideas" list. It is worth reading before proposing
+anything, because upstream has already named several of these — and it includes
+an explicit **"Human + Agent Co-use"** section, so the agent use case is not a
+foreign concern being introduced from outside.
+
+| Upstream's stated gap | Relation to this analysis |
+|---|---|
+| No JSON/machine-readable output; agents must parse human text | **M6**, independently identified |
+| `gion doctor` checks a narrow set; misses orphan worktrees, branch conflicts, stale artifacts | **D5**, and broader than what this analysis first scored |
+| Bare store freshness depends on manual `git fetch`; no auto/update flow | **Missed here** — see M5 below |
+| `--review` workspaces need manual fetch to pull newer PR updates; no refresh command | **Missed here** — same root cause |
+| `manifest ls` needs a drift model that stays stable and understandable | Not a substrate requirement; upstream's own concern |
+
+Two consequences.
+
+First, the two headline gaps in this document are not outside criticism — the
+maintainer wrote them down first. That is the strongest available evidence for
+the [fork-or-upstream](#fork-or-upstream) conclusion, and stronger than any
+inference from the architecture.
+
+Second, this analysis missed two real gaps by scoring the substrate's
+requirement list without reading upstream's own. Both are recorded below.
+
 ## Summary
 
 | # | Requirement | Score | One-line assessment |
@@ -51,14 +77,14 @@ This shapes almost every finding below, so it is stated once here:
 | M2 | Ergonomic CLI | 🟡 | Reconciliation verbs cover creation and removal; no `status`, no `exec` |
 | M3 | Safe cleanup | ✅ | Risk taxonomy, plan-before-destroy, resumable removal state |
 | M4 | Monorepo and polyrepo | ✅ | Workspace-of-N-worktrees is the native model; no `focus` |
-| M5 | Efficient storage | ✅ | Shared bare store at `<root>/bare/` |
+| M5 | Efficient storage | ✅ | Shared bare store at `<root>/bare/` — but nothing refreshes it |
 | M6 | Machine interface | ❌ | No JSON, no exit code taxonomy |
 | **Strongly desired** ||||
 | D1 | Hook trust/approval | ❌ | Blocked on M1 |
 | D2 | Blocking/background hooks | ❌ | Blocked on M1 |
 | D3 | Archive/reopen | ❌ | Removal is terminal |
 | D4 | Trash-before-delete | ❌ | Deletion is immediate |
-| D5 | Doctor/repair | 🟡 | Diagnosis good; `--fix` is a declared no-op |
+| D5 | Doctor/repair | 🟡 | Checks are narrow *and* `--fix` is a declared no-op |
 | D6 | Path templates | ❌ | Layout hardcoded |
 | D7 | Custom subcommands | ❌ | Closed dispatch switch |
 | D8 | Shell navigation protocol | ✅ | Action-file protocol, already integrated with apply |
@@ -69,6 +95,11 @@ This shapes almost every finding below, so it is stated once here:
 Seven of nine substrate gaps trace back to two absent subsystems: **hooks**
 (M1, D1, D2) and **machine output** (M6). The rest of the architecture is
 already in place.
+
+Two further gaps come from upstream's own list rather than the substrate's, and
+are recorded under M5 and D5: **nothing refreshes the bare store**, and
+**`doctor`'s checks are narrow as well as unrepaired**. See
+[upstream's own known gaps](#upstreams-own-known-gaps).
 
 ---
 
@@ -239,6 +270,28 @@ the store is a named directory with its own commands (`gion repo get/ls/rm`).
 Shared *package* caches (pnpm, uv, Cargo) are out of gion's hands and belong to
 whatever bootstrap runs under M1.
 
+**Caveat: the store goes stale, and nothing refreshes it.** Storage efficiency
+is met; storage *freshness* is not. `gion repo get` does not fetch when the bare
+store already exists (`docs/guides/USECASES.md` rates this "Good … not ideal for
+updating"), and upstream lists the absence of an auto/update flow as a known gap.
+`manifest gc` is the only command that fetches, and only for its own merge
+checks.
+
+This matters more for agents than for humans, and it is a substrate requirement
+rather than a nicety: step 3 of
+[the task workspace workflow](../substrate/08-task-workspace-workflow.md) is
+"fetch/update shared repository stores in bounded parallelism". gion does the
+attach but not the update. The consequence is silent: a workspace created
+against a stale store cuts its branch from a stale `origin/main` and nothing
+reports that it happened. A human notices when their branch is oddly behind; an
+agent creating many workspaces unattended does not.
+
+Upstream names the same root cause a second time for `--review` workspaces,
+where pulling newer PR commits also requires a manual fetch. A single
+`--fetch`/refresh capability would address both, and it pairs naturally with
+the parallel-fetch work in D9 — bounded concurrent fetching is exactly what
+`manifest gc` already implements.
+
 ### M6 · Machine interface ❌
 
 **Required:** stable exit codes, JSON output, non-interactive flags,
@@ -367,6 +420,14 @@ same checks and returns the list of issues; no automatic fixes are applied yet
 (the `fixed` list remains empty)"*. The flag exists and does nothing, which is
 worse than absent for an agent that trusts it.
 
+Upstream scores this the same way and goes further: `docs/guides/USECASES.md`
+rates the repo store health check "Fair (narrow check set)" and lists the missed
+categories — **orphan worktrees, branch conflicts, and stale workspace
+artifacts**. So the gap is both halves: the checks are narrow *and* the repair
+is absent. Those three categories are also precisely the failure modes an
+unattended agent produces most, which raises this above the convenience tier it
+was first placed in.
+
 ### D6 · Path templates ❌
 
 `internal/infra/paths/roots.go` hardcodes `<root>/bare` and `<root>/workspaces`;
@@ -486,6 +547,14 @@ apply are things any gion user wants, and each splits cleanly into a pure
 describes as upstreamable, and the fork's `main` is currently identical to
 upstream's, so there is no divergence to reconcile first.
 
+The decisive evidence is that **upstream already wants most of this**.
+`docs/guides/USECASES.md` independently lists the JSON gap, the narrowness of
+`doctor`, and the missing store-refresh flow as known gaps, and dedicates a
+section to "Human + Agent Co-use". These are not outside requirements being
+pushed onto a project that does not share them; they are the maintainer's own
+backlog, arrived at separately. Contributing against a list someone has already
+written is a materially different proposition from arguing for a new direction.
+
 The honest counter-argument is velocity: upstreaming is slower than shipping
 locally, and the hook design (question 1 in
 [adoption-questions.md](adoption-questions.md)) touches the manifest schema,
@@ -493,14 +562,23 @@ which is the kind of decision an upstream maintainer will rightly want to own.
 Prototyping on the fork to answer the open design questions is reasonable;
 keeping the result there permanently is not, on this evidence.
 
-Suggested order, by blocker status and effort-to-value:
+Suggested order, by blocker status and effort-to-value. Items marked ★ are on
+upstream's own known-gaps list, so they need no case made for them:
 
 1. **M1 + D1 + D2** — lifecycle hooks with trust and blocking/background
    semantics, designed as one unit. The adoption blocker.
-2. **M6** — `--json` over the existing plan types, plus an exit code taxonomy.
-   The agent-facing blocker; cheaper than it looks.
-3. **D9** — parallel `apply`, copying the `gc` worker pool. Best effort-to-value.
+2. ★ **M6** — mirror kra's `--format json` envelope and `0`/`2`/`3` exit codes
+   over the existing plan types. The agent-facing blocker, and the design is
+   already settled in a sibling tool.
+3. ★ **M5-freshness + D9** — a fetch/refresh flow for the bare store and for
+   `--review` workspaces, built on bounded parallel fetching, then parallel
+   `apply` using the same pool. These share machinery and `manifest gc` already
+   has the pattern; best combined effort-to-value.
 4. **M2** — `status` and `exec`.
-5. **D5** — make `--fix` real, or remove the flag until it is.
-6. **D3** — archive/reopen, only after its manifest representation is settled.
+5. ★ **D5** — widen `doctor` to orphan worktrees, branch conflicts and stale
+   artifacts, and either make `--fix` real or remove it until it is. Higher
+   priority than first scored, because those are the failure modes unattended
+   agents actually produce.
+6. **D3** — archive/reopen. Semantics are settled by kra's precedent; what
+   remains is whether archived becomes a third `planner` state.
 7. **D4, D6, D7, M4-focus** — convenience; no rush.

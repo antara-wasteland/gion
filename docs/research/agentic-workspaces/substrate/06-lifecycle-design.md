@@ -91,11 +91,46 @@ These should be tracked and cancellable rather than making creation wait forever
 
 ## Hook trust
 
-Checked-in hook definitions are executable code.
+Checked-in hook definitions are executable code. Project-level hooks should
+require explicit approval before first execution, and again when their
+definition changes. Locally-configured hooks, which the user wrote themselves,
+can have a different policy.
 
-Project-level hooks should require explicit approval before first execution and again when their executable definition changes.
+That much is easy to state and easy to get wrong, so the mechanics matter.
 
-Local user configuration can have a different trust policy.
+**What approval is bound to.** An approval should record a digest of the
+resolved hook definition, scoped to the repository and the hook event. Comparing
+digests on each run is what makes "again when their definition changes"
+enforceable rather than aspirational.
+
+**The limit of that guarantee, stated plainly.** A digest over the hook
+definition does not cover what the definition *invokes*. A hook declared as
+`./scripts/worktree-bootstrap` has a stable definition while the script it runs
+changes freely with every pull — so approving the hook once approves an
+indirection, not a payload. Options are to digest the referenced scripts too
+(brittle: they have their own dependencies), to treat any change to the
+checked-out tree as invalidating (safe, unusably noisy), or to accept the
+limitation and be honest that hook approval gates *declaration* rather than
+behavior. There is no clean answer; a design that does not pick one has silently
+picked the third.
+
+**Where approvals live.** Outside the repository. An approval stored in the tree
+it authorizes is self-certifying — a pull could deliver both a new hook and its
+own approval.
+
+**Failure handling.** Unapproved, changed-since-approval, and declined all
+resolve the same way: the hook does not run, and the workspace stops in
+`bootstrap-failed` with the reason recorded. Never silently skip a blocking hook
+and continue — a workspace that reports ready without its invariants established
+is worse than one that reports failure.
+
+**Non-interactive contexts.** This is where trust models usually break. An agent
+or CI run has nobody to prompt, and the tempting resolutions — auto-approve when
+there is no TTY, or let `--no-prompt` imply consent — both convert the trust gate
+into an announcement. Unattended runs must fail closed on an unapproved hook.
+Pre-approving out of band (an explicit, auditable approval step before the
+unattended run) is the escape hatch, not inferring consent from the absence of a
+human.
 
 ## Idempotency
 

@@ -11,7 +11,7 @@ scope: substrate
 ```text
 ┌─────────────────────────────────────────────┐
 │ Specifications / Plans / Agent Harness      │
-│ OpenSpec, AXIS, AGENTS.md, execution policy │
+│ specs, plans, agent harness, exec policy    │
 └─────────────────────┬───────────────────────┘
                       │ task identity
                       ▼

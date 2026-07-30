@@ -174,40 +174,32 @@ The split became:
 Mani
 = durable repository inventory
 
-Gion/kra-like manager
+task workspace manager
 = ephemeral task workspace
 ```
 
-## 9. kra added an operational task model
+## 9. An operational task model
 
-`tasuku43/kra` revealed another useful layer.
-
-Where Gion feels declarative and reconciliation-oriented, kra feels ticket/workspace lifecycle-oriented.
-
-It introduces an explicit task/ticket workspace that can contain:
-
-- repository worktrees,
-- notes,
-- artifacts,
-- archive/reopen lifecycle.
+Alongside the declarative, reconciliation-oriented model, a second framing
+appeared: an explicit ticket/task workspace containing repository worktrees,
+notes, artifacts, and an archive/reopen lifecycle.
 
 The task key itself became an especially appealing stable identity.
 
-## 10. cmux versus Herdr
+## 10. Terminal runtime as an adapter
 
-kra integrates with cmux, but the workstation uses Herdr.
-
-Rather than adopting cmux solely for kra, the better design is a terminal/runtime adapter abstraction.
+The workstation uses Herdr, but terminal support should not be hardcoded to one
+multiplexer. The better design is a terminal/runtime adapter abstraction.
 
 ```text
 task workspace manager
         │
-        ├── cmux adapter
         ├── Herdr adapter
         └── directory/no-op adapter
 ```
 
-A Herdr PR therefore makes sense if implemented generically rather than as scattered special cases.
+A Herdr integration therefore makes sense if implemented generically rather than
+as scattered special cases.
 
 ## 11. Ownership boundary with Herdr
 
@@ -238,7 +230,6 @@ Specifications / plans / agent harness
                  │
                  ▼
         task workspace manager
-          (kra/Gion-like)
            │             │
            ▼             ▼
     repo lifecycle     Herdr
@@ -266,11 +257,12 @@ The strongest architectural direction is:
 - native Git underneath,
 - Go/compiled implementation for parallel polyrepo work,
 - Worktrunk-quality lifecycle,
-- kra/Gion-quality task composition,
+- task-first workspace composition,
 - Herdr for terminal/process orchestration,
 - higher-level agent/spec systems kept separate.
 
-The next practical investigation should compare Gion and kra at source level around:
+The next practical investigation should examine the candidate substrate at source
+level around:
 
 - hook extensibility,
 - parallel execution,
@@ -280,4 +272,5 @@ The next practical investigation should compare Gion and kra at source level aro
 - machine-readable APIs,
 - runtime integration boundaries.
 
-That comparison should decide whether to upstream changes, fork one of them, or build a very small integration layer around them.
+That examination should decide whether to upstream changes, fork, or build a
+small integration layer.

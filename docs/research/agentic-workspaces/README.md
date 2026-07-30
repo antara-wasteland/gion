@@ -65,7 +65,6 @@ point, not drift.
 ### References — external tools
 
 - [Tool landscape](references/README.md) — the categories these tools actually fall into
-- [kra](references/kra.md)
 - [Worktrunk](references/worktrunk.md)
 - [GTR and thin managers](references/gtr-and-thin-managers.md)
 - [Herdr](references/herdr.md)

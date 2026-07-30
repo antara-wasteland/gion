@@ -92,9 +92,11 @@ requirement list without reading upstream's own. Both are recorded below.
 | **Out of scope** ||||
 | X | LLM/merge/PR/model policy | ✅ | Genuinely absent |
 
-Seven of nine substrate gaps trace back to two absent subsystems: **hooks**
-(M1, D1, D2) and **machine output** (M6). The rest of the architecture is
-already in place.
+Eleven requirements score below ✅. Four of them are really two absent
+subsystems — **hooks** (M1, D1, D2) and **machine output** (M6) — and those two
+carry the weight: they are the only ❌ items that block adoption rather than
+merely inconvenience it. The remaining seven are individually small, and the
+architecture underneath all of them is already in place.
 
 Two further gaps come from upstream's own list rather than the substrate's, and
 are recorded under M5 and D5: **nothing refreshes the bare store**, and
@@ -130,13 +132,9 @@ creates is a checked-out worktree and nothing more — the user still has to ent
 it and run project setup by hand, which is precisely the operational gap that
 motivated the whole survey.
 
-Worth keeping in proportion: **kra does not have hooks either**. Neither
-`ws create` nor `ws add-repo` runs user-defined commands, and its
-`ws open --command` sends a startup command to the terminal rather than running
-a tracked lifecycle step (see [references/kra.md](../references/kra.md)). This
-is a category-wide gap, not gion falling behind a sibling — which makes it a
-capability worth building well and upstreaming rather than a deficit to catch up
-on.
+Worth keeping in proportion: this is a young category, and no worktree manager
+surveyed treats bootstrap as a first-class, tracked lifecycle step. It is a
+capability worth building well and upstreaming, not a deficit to catch up on.
 
 **Shape of the fix.** The declarative model gives this a natural home that
 imperative tools do not have: bootstrap state belongs in the reconciliation
@@ -334,18 +332,12 @@ So `--json` is a second renderer over types that exist, are pure, are already
 versioned for reuse across two binaries, and carry no formatting concerns —
 not new data plumbing. Exit codes are independent of it and cheaper still.
 
-**And the design work is already done, by the same author.** kra supports
-`--format json` across its core commands with an `ok` / `action` / `result` /
-`error` envelope and a `failures[]` array carrying `code` and `message`, plus a
-three-valued exit taxonomy: `0` success, `2` usage error, `3` business or
-runtime failure. Its specs describe this as a deliberate effort to align JSON
-contracts for automation.
-
-That reframes M6 from a design problem to an adoption one. gion should not
-invent a schema; it should mirror kra's, so that an agent driving both tools
-sees one convention. It also removes the main argument for deferring: the
-envelope, the error-code discipline and the exit codes have already been
-specified and shipped somewhere the maintainer controls.
+What remains is a design decision rather than an implementation problem: the
+response envelope, how errors are represented within it, and an exit code
+taxonomy that distinguishes usage errors from runtime failures. Those should be
+settled once and applied consistently, since they are the parts an agent
+integrates against and the parts most expensive to change later. See
+[adoption question 6](adoption-questions.md).
 
 ---
 
@@ -375,27 +367,22 @@ a command, or `apply` will simply reconcile archived workspaces out of existence
 This remains the requirement whose design is most entangled with gion's core
 model.
 
-**kra has a worked answer, and gion is closer to it than expected.** kra's
-`ws close` refreshes a `repos_restore` record from live state, removes the
-worktrees, deletes the local branches from the bare pool, and moves the
-workspace to a sibling `archive/` directory; `ws reopen` rebuilds the worktrees
-from that record. So archived worktrees are **detached, with metadata as the
-restore authority** — the "reduced to lighter metadata" option, not
-"remain attached."
+One asset gion already has: a `gion.yaml` repo entry records `alias`,
+`repo_key`, `branch` and `base_ref` — everything needed to rebuild a worktree
+from the bare store. **The manifest is already a restore record.** What it
+lacks is a state meaning "keep this record, do not materialize worktrees."
 
-`repos_restore` stores `repo_uid`, `repo_key`, `remote_url`, `alias`, `branch`
-and `base_ref`. gion's `gion.yaml` repo entries already store `alias`,
-`repo_key`, `branch` and `base_ref` — **gion's manifest is already a
-`repos_restore` record.** It has everything needed to reconstruct a workspace;
-what it lacks is a state meaning "keep this record, do not materialize
-worktrees."
-
-That makes the likely shape a workspace-level status in `gion.yaml` that
+That suggests the shape worth exploring first is a workspace-level status that
 `planner` treats as a third desired state — materialized, archived, absent —
-rather than a new storage location or a parallel metadata file. gion would not
-need kra's directory move, because gion already separates desired state from
-filesystem layout. Still a real change to the diff model, and still the item to
-design most carefully, but no longer an open-ended question.
+rather than a separate archive location or a parallel metadata file, since gion
+already separates desired state from filesystem layout. Whether archived
+worktrees should be detached and rebuilt from the manifest, or preserved in
+place, is still open; detaching is what makes archive worth having (it reclaims
+the working tree while keeping the branch recoverable), but it puts more weight
+on the manifest being correct.
+
+Either way this touches the diff model that everything else depends on, so it
+should be designed deliberately rather than added.
 
 ### D4 · Trash-before-delete ❌
 
@@ -567,9 +554,9 @@ upstream's own known-gaps list, so they need no case made for them:
 
 1. **M1 + D1 + D2** — lifecycle hooks with trust and blocking/background
    semantics, designed as one unit. The adoption blocker.
-2. ★ **M6** — mirror kra's `--format json` envelope and `0`/`2`/`3` exit codes
-   over the existing plan types. The agent-facing blocker, and the design is
-   already settled in a sibling tool.
+2. ★ **M6** — a JSON renderer over the existing plan types, plus an exit code
+   taxonomy. The agent-facing blocker; cheaper than it looks, but settle the
+   envelope and error representation before shipping any of it.
 3. ★ **M5-freshness + D9** — a fetch/refresh flow for the bare store and for
    `--review` workspaces, built on bounded parallel fetching, then parallel
    `apply` using the same pool. These share machinery and `manifest gc` already
@@ -579,6 +566,5 @@ upstream's own known-gaps list, so they need no case made for them:
    artifacts, and either make `--fix` real or remove it until it is. Higher
    priority than first scored, because those are the failure modes unattended
    agents actually produce.
-6. **D3** — archive/reopen. Semantics are settled by kra's precedent; what
-   remains is whether archived becomes a third `planner` state.
+6. **D3** — archive/reopen, only after its manifest representation is settled.
 7. **D4, D6, D7, M4-focus** — convenience; no rush.

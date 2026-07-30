@@ -89,16 +89,7 @@ settled as part of the hook spec rather than discovered during implementation.
 
 ## 4. How is an archived workspace represented in `gion.yaml`?
 
-Blocks D3. **Narrowed** — kra's implementation answers the semantic half (see
-[references/kra.md](../references/kra.md)): archived worktrees are detached and
-metadata is the restore authority, not preserved in place. And gion's manifest
-repo entries already carry the fields kra's `repos_restore` uses.
-
-So the remaining question is narrower than it was: should archived be a third
-state in `planner`'s diff — materialized, archived, absent — or something
-outside the manifest entirely? A third state keeps one source of truth and
-avoids kra's directory move (gion already separates desired state from layout),
-but it touches the core diff model that everything else relies on.
+Blocks D3, and it is the question most entangled with gion's core model.
 
 gion's diff is two-state: in the manifest and on disk (converged), in one but not
 the other (add/remove). An archived workspace is neither, and if it is simply
@@ -106,10 +97,20 @@ left in the manifest with its directory gone, `apply` will recreate it — while
 removing it from the manifest makes `apply` delete the worktrees archiving was
 supposed to preserve.
 
-So archive needs a manifest-level state before it needs a command. The
-attached-versus-detached sub-question is effectively settled by kra's precedent
-(detach, restore from metadata); what remains open is whether the choice should
-ever depend on policy or workspace age, or whether one behavior is enough.
+So archive needs a manifest-level state before it needs a command. Should that
+be a third state in `planner`'s diff — materialized, archived, absent — or
+something outside the manifest entirely? A third state keeps one source of
+truth and needs no separate archive location, since gion already separates
+desired state from filesystem layout, but it touches the diff model everything
+else relies on.
+
+The related sub-question: should archived worktrees be detached and rebuilt on
+reopen, or preserved in place? A `gion.yaml` repo entry already records `alias`,
+`repo_key`, `branch` and `base_ref` — enough to rebuild from the bare store — so
+detaching is feasible and is what makes archive worth having, since it reclaims
+the working tree while keeping the branch recoverable. It also puts more weight
+on the manifest being correct. Whether the choice should ever depend on policy
+or workspace age, or whether one behavior suffices, is open.
 
 Note that `resume` already exists as a `mode` value in
 `docs/spec/core/METADATA.md` without a lifecycle behind it — worth deciding
@@ -131,23 +132,25 @@ primary consumer.
 
 ## 6. Scope of the first JSON output
 
-Blocks M6. **Mostly answered** — the schema question should not be reopened.
-kra already ships `--format json` with an `ok`/`action`/`result`/`error`
-envelope, a `failures[]` array of `code`/`message`, and exit codes `0`/`2`/`3`
-(success / usage / runtime). Same author, same workstation. gion should mirror
-that rather than invent a second convention for an agent to learn.
+Blocks M6. Emitting JSON for every command at once is a large surface to commit
+to and keep stable, so both the schema and the rollout need deciding:
 
-What is still open is scope and spelling:
-
-- Which commands first? `plan` and a future `status` are what an agent most
-  needs to read; committing every command at once is a large stable surface.
-- `--format json` (kra's spelling) or `--json`? Matching kra is the obvious
-  default.
-- Does `giongo` participate, or is `--print` sufficient for the picker?
+- **Envelope.** A consistent wrapper (status, the command that ran, the result
+  payload, structured errors) or bare per-command payloads? A wrapper costs
+  verbosity and buys one parsing path across every command.
+- **Error representation.** Structured error codes an agent can branch on, or
+  human strings? Codes are the whole point for automation, and retrofitting
+  them later is a breaking change for anyone who parsed the strings.
+- **Spelling.** `--json` or `--format json`? The latter leaves room for other
+  formats without another flag.
+- **Scope.** Which commands first? `plan` and a future `status` are what an
+  agent most needs to read.
+- **Does `giongo` participate**, or is `--print` sufficient for the picker?
 
 Exit codes are independent and cheaper, and could land first — both
 `cmd/gion/main.go` and `cmd/giongo/main.go` currently `os.Exit(1)` on every
-error path, so adopting `0`/`2`/`3` is purely additive.
+error path, so any taxonomy that separates usage errors from runtime failures is
+purely additive.
 
 ## 7. Should the shared bare store be gion's own?
 
@@ -170,17 +173,13 @@ It must not create extra Git worktrees — Git's unit is the repository.
 
 ## 9. Terminal runtime: adapter, or out of scope entirely?
 
-[references/herdr.md](../references/herdr.md) argued for a generic
-`WorkspaceRuntime` interface rather than a hardcoded multiplexer integration.
-That argument has been overtaken: kra already has such an interface
-(`cmuxOpenClient`, with a concrete `cmuxctl.Client` behind a factory), so a
-Herdr backend there is an implementation against an existing seam rather than an
-architectural change.
+[references/herdr.md](../references/herdr.md) argues for a generic runtime
+interface rather than a hardcoded multiplexer integration, should gion ever grow
+one.
 
-The prior question for gion is unchanged and more pointed for it: does terminal
-runtime belong in gion *at all*, given that `gion shell init` already solves
-navigation without owning any session state — and given that the sibling tool
-which does own a runtime already has the adapter?
+The prior question is whether terminal runtime belongs in gion *at all*, given
+that `gion shell init` already solves navigation without owning any session
+state.
 
 Leaving it out keeps gion smaller and keeps the substrate's ownership boundary
 clean. Taking it on means persisting a runtime workspace ID in metadata and

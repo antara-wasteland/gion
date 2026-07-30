@@ -31,6 +31,13 @@ archive
   ├── preserve workspace
   └── post-archive
 
+reopen
+  ├── pre-reopen
+  ├── restore worktrees from metadata
+  ├── post-create   only for setup invalidated while archived
+  ├── post-create-bg
+  └── post-reopen
+
 remove
   ├── safety analysis
   ├── pre-remove
@@ -41,6 +48,19 @@ remove
 gc
   └── delete eligible trash/stale state
 ```
+
+Reopen deliberately reuses `post-create` rather than inventing a parallel
+`post-reopen-setup` event: the question it answers is the same one creation
+answers — is this worktree ready to work in — and a hook author should not have
+to write it twice.
+
+What differs is that reopen must decide *which* setup is still valid. Archiving
+detaches worktrees but does not freeze the world: lockfiles move, toolchains
+change, and anything left on disk may have been garbage-collected. So reopen
+should treat recorded bootstrap state as a claim to re-validate rather than a
+fact, and re-run what no longer holds. Being able to say "already satisfied,
+skipping" is what makes reopen cheaper than create — and it depends entirely on
+the idempotency described below.
 
 ## Blocking versus background hooks
 

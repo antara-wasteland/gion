@@ -24,8 +24,19 @@ This is much cheaper than cloning the repository for every agent.
 
 A manager that maintains an explicit shared bare-repository pool makes this model
 especially natural for task workspaces spanning several repositories: each
-repository is fetched once into the pool, and every task attaches worktrees from
+repository is cloned into the pool once, and every task attaches worktrees from
 it rather than re-cloning.
+
+Cloning once is not the same as fetching once. The pool is a cache of remote
+state, so it goes stale, and a stale pool is worse than a slow one: a task cut
+from a stale `origin/main` starts from the wrong base, and nothing about the
+resulting worktree looks wrong. The pool must therefore be refreshed on a
+defined schedule — at minimum before resolving the base ref for a new worktree,
+and on explicit demand — rather than only when a repository first enters it.
+
+Freshness is a correctness property here, not a performance one. Fetching is
+cheap and bounded-parallelizable; silently branching from a stale base is
+neither cheap nor visible.
 
 ## The expensive parts are usually elsewhere
 

@@ -15,11 +15,6 @@ on. Do not cite them as current fact; re-check before acting on one. gion's own
 assessment lives in [gion/](../gion/) and is the only part of this research
 grounded in code that can be verified from this repository.
 
-Exception: [kra.md](kra.md) has since been checked against kra's indexed source
-and separates verified claims from the original survey impressions. It is still
-dated, but it is no longer only recollection — and several of its findings
-corrected conclusions elsewhere in this research.
-
 ## Categories
 
 The tools fall into different architectural categories.
@@ -27,7 +22,6 @@ The tools fall into different architectural categories.
 | Tool | Primary abstraction | Strength |
 |---|---|---|
 | gion | declarative multi-repo workspace | task composition, shared stores, plan/apply |
-| kra | ticket/task workspace | operational task lifecycle, archive/reopen |
 | Worktrunk | repository worktree | excellent lifecycle and UX |
 | GTR | repository worktree | pragmatic complete feature set |
 | gwq | global worktree inventory | navigation/discovery |
@@ -45,7 +39,6 @@ Keep Worktrunk/GTR as references for ergonomics and safety rather than automatic
 
 ## Pages
 
-- [kra](kra.md) — ticket/task workspace lifecycle
 - [Worktrunk](worktrunk.md) — repository-scoped lifecycle and UX reference
 - [GTR and thin managers](gtr-and-thin-managers.md) — GTR, gwq, `git-wt` variants
 - [Herdr](herdr.md) — terminal runtime and the runtime-adapter argument

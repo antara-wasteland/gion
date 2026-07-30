@@ -31,6 +31,20 @@ BRANCH
 INDEX
 ```
 
+**Trust is part of this requirement, not an enhancement of it.** Every command
+above is defined by the repository being checked out — `./scripts/worktree-bootstrap`
+plainly so, but `direnv allow` and package-manager lifecycle scripts equally, since
+both execute code the checkout controls. Creating a worktree therefore means
+executing untrusted content unless approval gates it.
+
+So bootstrap must not run repository-controlled commands until they are approved,
+and approval must be re-sought when the definition changes. Hook trust appears
+again under *Strongly desired* below, where it covers the wider trust model
+(scope, storage, and policy for locally-configured hooks); that placement is about
+the machinery, and does not make approval optional for this requirement. A
+manager that automatically runs checked-in setup on clone-and-create has built a
+remote code execution path, not a convenience.
+
 ### Ergonomic CLI
 
 Core operations should be cheap enough to become muscle memory:

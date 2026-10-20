@@ -1,5 +1,8 @@
 # gion — task workspaces (built on Git worktrees) as code, with guardrails.
 
+> **Antara Wasteland migration (2026-10-20; provisional):** Read the [shared GitHub operating contract](https://github.com/antara-wasteland/.github-private/blob/feat/github-operating-contract/docs/github-operating-contract.md), [Trajectory #88](https://github.com/antara-wasteland/trajectory/issues/88), and [Alchemy Discussion #86](https://github.com/antara-wasteland/trajectory/discussions/86) before cross-repo work. [Project Vision](https://github.com/orgs/antara-wasteland/projects/2) is the existing Harness Engineering research program. SEED unification and Linear retirement remain in progress; preserve this repository's evidence and execution boundaries.
+
+
 Define workspaces in YAML, then plan/apply to reconcile safely.
 
 Worktree sprawl brings pain:
